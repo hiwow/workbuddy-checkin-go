@@ -1,21 +1,32 @@
 # WorkBuddy 自动签到（Go）
 
-一个用 Go 编写的 WorkBuddy 每日自动签到小工具：
+一个用 Go 编写的 WorkBuddy 每日自动签到小工具：读取本机桌面端登录凭证并自动解密
+5.6+ 版本的 `$wbEncrypted` 加密字段，多账号去重后按需续期 `accessToken`，调用官方接口
+完成每日签到，并带当日幂等缓存避免重复请求。
 
-- 读取本机 WorkBuddy 桌面端登录凭证，自动解密新版 `$wbEncrypted` 加密字段；
-- 多账号自动发现、按 `uid` 去重（同 uid 取最近刷新的一份）；
-- `accessToken` 临近过期时自动用 `refreshToken` 续期并回写；
-- 调用官方签到接口完成每日签到，并带当日幂等缓存，避免重复请求。
+- 纯 Go 标准库实现，无第三方依赖。
+- 凭证每次运行现场解密，密钥不落盘。
+- 支持多账号、Token 自动续期、当日幂等缓存。
 
-实现仅依赖 Go 标准库，无第三方依赖。
+## 环境与兼容性
 
-## 环境要求
+**运行前提**
 
-- 操作系统：Windows（凭证解密依赖本机安装的 WorkBuddy 桌面端）
+- Windows 10/11（凭证解密依赖本机安装的 `WorkBuddy.exe`）
 - Go 1.24 及以上
 - 已登录的 WorkBuddy 桌面端（用于提供凭证）
 
-> 非 Windows 环境无法解密新版加密凭证，只能读取 `--auths` 目录下的明文凭证文件。
+**兼容性**
+
+| 维度 | 说明 |
+| --- | --- |
+| 桌面端版本 | `< 5.6`：凭证字段为明文，直接读取；`>= 5.6`：字段为 `$wbEncrypted` 信封，自动解密 |
+| 操作系统 | Windows 完整可用并已实测；macOS/Linux 仅能读取明文凭证，无法解密 5.6+ 信封，未实测 |
+| 功能范围 | 凭证解析 + 每日签到；不含成长中心、互动玩法、开学季等其它任务 |
+| 运行依赖 | 仅 Go 标准库 |
+
+> 解密依赖 `WorkBuddy.exe` 中 `electron_browser_workbuddy_storage` 绑定提供的构建密钥；
+> 官方更换绑定名或密钥方案时需同步适配。
 
 ## 构建
 
@@ -63,16 +74,16 @@ go build -o wbcheckin.exe .
 
 ### 2. 加密字段解密
 
-新版桌面端会把 `nickname`、`phoneNumber`、`accessToken`、`refreshToken` 等字段包装成
-`{"$wbEncrypted":1,"envelope":"..."}`，其中 `envelope` 是 base64 的 JSON 信封，内容为
-AES-256-GCM 密文。解密流程：
+5.6 及以上版本的桌面端会把 `nickname`、`phoneNumber`、`accessToken`、`refreshToken`
+等字段包装成 `{"$wbEncrypted":1,"envelope":"..."}`，其中 `envelope` 是 base64 的 JSON
+信封，内容为 AES-256-GCM 密文。工具会自动识别是否含加密字段，含则按下述流程解密：
 
 1. 以 `ELECTRON_RUN_AS_NODE=1` 方式运行本机 `WorkBuddy.exe`，通过
    `process._linkedBinding("electron_browser_workbuddy_storage").loggerGet()`
    取出构建密钥 `atRestSecretKey`；
 2. `key = SHA256(atRestSecretKey)`，按固定 AAD 规则用 `crypto/aes` + `crypto/cipher`
    对每个加密字段做 AES-256-GCM 解密；
-3. 密钥每次运行现场获取且不落盘；若解密失败会强制重新取一次密钥重试一次。
+3. 密钥每次运行现场获取且不落盘；若解密失败会强制重新取一次密钥并重试一次。
 
 ### 3. 签到
 
@@ -107,12 +118,6 @@ Header: X-Refresh-Token / X-Auth-Refresh-Source: plugin
 5. **凭证安全自负**：本工具会在本机读取并在明文目录写入账号凭证（含 `accessToken`/`refreshToken`）。请自行确保运行环境安全，**切勿**将 `auths/`、`checkin-cache.json` 或任何解密后的凭证上传、分享或提交到公开仓库，否则可能导致账号被盗用。
 6. **无任何担保**：本软件按“现状”提供，不提供任何明示或暗示的担保。因使用或无法使用本工具造成的任何直接或间接损失（包括但不限于账号异常、数据丢失、积分/权益变动等），作者**概不负责**。
 7. **合规责任自负**：请在遵守当地法律法规及相关服务条款的前提下使用；如你不同意上述任何条款，请立即停止使用并删除本项目。
-
-## 已知限制
-
-- 解密依赖 `WorkBuddy.exe` 中 `electron_browser_workbuddy_storage` 绑定所提供的构建密钥；官方更换绑定名或密钥方案时需同步适配。
-- 目前仅覆盖“凭证解密 + 每日签到”，不含成长中心、互动玩法、开学季等其它任务。
-- 仅在 Windows 上验证过完整流程。
 
 ## 许可证
 
