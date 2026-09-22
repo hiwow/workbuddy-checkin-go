@@ -1,0 +1,19 @@
+# build output
+wbcheckin.exe
+wbcheckin
+*.exe
+
+# 解密后的凭证（含真实 accessToken，绝不入库）
+auths/
+*.info
+
+# 当日幂等缓存
+checkin-cache.json
+
+# WorkBuddy 本地记忆目录
+.workbuddy/
+
+# 目录内遗留的 JS/PS1 脚本（本仓库仅收录 Go 实现）
+workbuddy-checkin.js
+workbuddy-checkin.ps1
+workbuddy-checkin.bat
